@@ -44,7 +44,10 @@ import com.linkBuddy.repository.BookmarkRequestRepository;
  *                                the agent can suggest the closest real category if the user's
  *                                wording doesn't match one exactly.
  *   4. submitBookmarkRequest   - saves a PENDING request once the agent has gathered enough
- *                                details from the user, for an admin to review later.
+ *                                details from the user, for an admin to review later. First checks for an
+ *                                existing bookmark that closely matches (by the same keyword/vector matching
+ *                                as searchBookmark, at a stricter threshold) and refuses to save - returning
+ *                                the match instead - unless called again with confirmDuplicate=true.
  *
  * Spring AI serializes the @Tool method signatures (including @ToolParam descriptions) into
  * the model's tool schema, and serializes whatever these methods return back to the model as
@@ -236,13 +239,34 @@ public class BookmarkTools {
             + "user's need. Only call this after you have collected a title, a description, and a category from "
             + "the user (the URL is optional - pass an empty string if the user does not know it), AND after you "
             + "have shown the user a summary of these exact details and they have explicitly confirmed/approved "
-            + "it. Never invent a URL yourself, and never call this before the user has confirmed.")
+            + "it. Never invent a URL yourself, and never call this before the user has confirmed. Before saving, "
+            + "this automatically checks for an existing bookmark that looks very similar; if one is found, it "
+            + "is NOT submitted and the match is returned instead - tell the user about it and ask whether they "
+            + "still want a new request filed. Only call this again with confirmDuplicate=true if they "
+            + "explicitly say yes.")
     public String submitBookmarkRequest(
             @ToolParam(description = "Short descriptive title for the bookmark") String title,
             @ToolParam(description = "The URL if the user knows it, otherwise an empty string") String url,
             @ToolParam(description = "What the bookmark is for / why it's useful") String description,
             @ToolParam(description = "A category, e.g. Engineering, HR, Finance, Tools") String category,
+            @ToolParam(required = false, description = "Leave unset/false on the first attempt. Set to true "
+                    + "only when the user was already told about a similar existing bookmark (from a prior call "
+                    + "to this same tool) and explicitly confirmed they still want a separate request filed.")
+            Boolean confirmDuplicate,
             ToolContext toolContext) {
+
+        if (!Boolean.TRUE.equals(confirmDuplicate)) {
+            List<BookmarkResult> duplicates = findPossibleDuplicates(title, description);
+            if (!duplicates.isEmpty()) {
+                String matches = duplicates.stream()
+                        .map(b -> b.title() + " - " + b.url() + " (" + b.category() + ")")
+                        .collect(Collectors.joining("; "));
+                return "Not submitted. An existing bookmark looks very similar: " + matches + ". Tell the user "
+                        + "about this match and ask whether they still want a new request filed despite it. "
+                        + "If they confirm yes, call submitBookmarkRequest again with the same details and "
+                        + "confirmDuplicate=true.";
+            }
+        }
 
         String username = String.valueOf(toolContext.getContext().get("username"));
 
@@ -258,6 +282,38 @@ public class BookmarkTools {
 
         return "Submitted request #" + bookmarkRequest.getId() + " for '" + title
                 + "'. It is now pending admin approval; the user will be notified once it is reviewed.";
+    }
+
+    // Stricter than searchBookmark's own matching: a plain keyword/fuzzy hit against title+description is
+    // already precise, and the vector fallback uses a higher similarity floor (0.5 vs 0.35) so only genuinely
+    // close matches get flagged as a possible duplicate - this runs on every submit, so false positives would
+    // be annoying.
+    private List<BookmarkResult> findPossibleDuplicates(String title, String description) {
+        String query = emptyToBlank(title) + " " + emptyToBlank(description);
+
+        List<BookmarkResult> keywordMatches = findByKeywordMatch(query);
+        if (!keywordMatches.isEmpty()) {
+            return keywordMatches;
+        }
+
+        try {
+            SearchRequest request = SearchRequest.builder()
+                    .query(query)
+                    .topK(3)
+                    .similarityThreshold(0.5)
+                    .build();
+
+            return vectorStore.similaritySearch(request).stream()
+                    .map(doc -> new BookmarkResult(
+                            stringMeta(doc, "title", doc.getText()),
+                            stringMeta(doc, "url", ""),
+                            stringMeta(doc, "category", ""),
+                            stringMeta(doc, "description", "")))
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Duplicate check vector search failed for '{}': {}", title, e.getMessage(), e);
+            return List.of();
+        }
     }
 
     private static String stringMeta(Document doc, String key, String fallback) {
