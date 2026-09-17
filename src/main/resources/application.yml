@@ -19,17 +19,20 @@ spring:
     open-in-view: false
 
   ai:
-    openai:
-      # Set OPENAI_API_KEY as an environment variable. Any OpenAI-compatible endpoint
-      # can be used by also overriding spring.ai.openai.base-url.
-      api-key: ${OPENAI_API_KEY}
-      chat:
-        options:
-          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
-          temperature: 0.2
-      embedding:
-        options:
-          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    azure:
+      openai:
+        # Org's APIM/Azure OpenAI sandbox - NOT public OpenAI. Endpoint and key are
+        # environment-specific and must never be hardcoded; set AZURE_OPENAI_ENDPOINT and
+        # AZURE_OPENAI_API_KEY as environment variables.
+        endpoint: ${AZURE_OPENAI_ENDPOINT}
+        api-key: ${AZURE_OPENAI_API_KEY}
+        chat:
+          options:
+            deployment-name: ${AZURE_OPENAI_CHAT_DEPLOYMENT:gpt-5.4-mini}
+            temperature: 0.2
+        embedding:
+          options:
+            deployment-name: ${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:text-embedding-3-small}
     vectorstore:
       pgvector:
         # Creates/verifies the vector_store table (with the pgvector extension) on startup.
@@ -39,6 +42,13 @@ spring:
         distance-type: COSINE_DISTANCE
         # Must match the embedding model's output dimension (text-embedding-3-small = 1536).
         dimensions: 1536
+
+app:
+  azure-openai:
+    # The Azure SDK bundled with this Spring AI version doesn't define this exact preview
+    # version as a selectable service version, so AzureOpenAiApiVersionConfig overrides the
+    # api-version query parameter on every request to this literal value instead.
+    api-version: ${AZURE_OPENAI_API_VERSION:2024-12-01-preview}
 
 vaadin:
   launch-browser: false

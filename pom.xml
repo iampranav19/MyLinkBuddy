@@ -45,10 +45,11 @@
 			<scope>runtime</scope>
 		</dependency>
 
-		<!-- Spring AI: chat model (OpenAI, configurable) + pgvector store -->
+		<!-- Spring AI: chat model (Azure OpenAI - the org's APIM/Azure OpenAI sandbox, not public
+		     OpenAI) + pgvector store -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
-			<artifactId>spring-ai-starter-model-openai</artifactId>
+			<artifactId>spring-ai-starter-model-azure-openai</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
