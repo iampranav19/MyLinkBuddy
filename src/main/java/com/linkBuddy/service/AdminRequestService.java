@@ -5,6 +5,8 @@ import java.util.Map;
 
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,7 +18,8 @@ import com.linkBuddy.repository.BookmarkRequestRepository;
 import com.linkBuddy.service.RequestBroadcaster.BookmarkRequestEvent;
 
 /**
- * Backs the admin approval workflow (/admin/requests).
+ * Backs the admin approval workflow (/admin/requests) and the published-bookmark management
+ * view (/admin/bookmarks), keeping the Bookmark table and its pgvector embeddings in sync.
  */
 @Service
 public class AdminRequestService {
@@ -66,18 +69,7 @@ public class AdminRequestService {
         bookmark.setDescription(description);
         bookmark.setCategory(category);
         bookmarkRepository.save(bookmark);
-
-        // Embed the newly approved bookmark into the pgvector knowledge base so the agent's
-        // searchBookmark tool can find it on future semantic searches.
-        Document document = new Document(
-                bookmark.getTitle() + " - " + bookmark.getDescription(),
-                Map.of(
-                        "bookmarkId", bookmark.getId(),
-                        "title", bookmark.getTitle(),
-                        "url", bookmark.getUrl(),
-                        "category", bookmark.getCategory() == null ? "" : bookmark.getCategory(),
-                        "description", bookmark.getDescription() == null ? "" : bookmark.getDescription()));
-        vectorStore.add(List.of(document));
+        embed(bookmark);
 
         request.setStatus(RequestStatus.APPROVED);
         bookmarkRequestRepository.save(request);
@@ -97,5 +89,57 @@ public class AdminRequestService {
 
         broadcaster.broadcast(new BookmarkRequestEvent(
                 request.getRequestedBy(), request.getId(), request.getTitle(), RequestStatus.REJECTED));
+    }
+
+    public List<Bookmark> listBookmarks() {
+        return bookmarkRepository.findAll();
+    }
+
+    /**
+     * Updates a published bookmark's fields and re-embeds it, so the agent's searchBookmark tool
+     * picks up the edited title/description on future semantic searches instead of the stale one.
+     */
+    @Transactional
+    public void updateBookmark(Long bookmarkId, String title, String url, String description, String category) {
+        Bookmark bookmark = bookmarkRepository.findById(bookmarkId)
+                .orElseThrow(() -> new IllegalArgumentException("Bookmark not found: " + bookmarkId));
+
+        bookmark.setTitle(title);
+        bookmark.setUrl(url);
+        bookmark.setDescription(description);
+        bookmark.setCategory(category);
+        bookmarkRepository.save(bookmark);
+
+        deleteEmbedding(bookmarkId);
+        embed(bookmark);
+    }
+
+    @Transactional
+    public void deleteBookmark(Long bookmarkId) {
+        if (!bookmarkRepository.existsById(bookmarkId)) {
+            throw new IllegalArgumentException("Bookmark not found: " + bookmarkId);
+        }
+        deleteEmbedding(bookmarkId);
+        bookmarkRepository.deleteById(bookmarkId);
+    }
+
+    // Embeds (or re-embeds) a bookmark into the pgvector knowledge base so the agent's
+    // searchBookmark tool can find it on future semantic searches. The bookmarkId metadata is
+    // what lets deleteEmbedding find the matching vector row(s) again later.
+    private void embed(Bookmark bookmark) {
+        Document document = new Document(
+                bookmark.getTitle() + " - " + bookmark.getDescription(),
+                Map.of(
+                        "bookmarkId", bookmark.getId(),
+                        "title", bookmark.getTitle(),
+                        "url", bookmark.getUrl(),
+                        "category", bookmark.getCategory() == null ? "" : bookmark.getCategory(),
+                        "description", bookmark.getDescription() == null ? "" : bookmark.getDescription()));
+        vectorStore.add(List.of(document));
+    }
+
+    private void deleteEmbedding(Long bookmarkId) {
+        Filter.Expression matchesBookmark = new FilterExpressionBuilder().eq("bookmarkId", bookmarkId).build();
+        vectorStore.delete(matchesBookmark);
     }
 }
