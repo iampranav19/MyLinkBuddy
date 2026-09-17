@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: mylinkbuddy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mylinkbuddy
+      POSTGRES_USER: mylinkbuddy
+      POSTGRES_PASSWORD: mylinkbuddy
+    ports:
+      - "5432:5432"
+    volumes:
+      - mylinkbuddy_pgdata:/var/lib/postgresql/data
+      - ./docker/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mylinkbuddy -d mylinkbuddy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mylinkbuddy_pgdata:

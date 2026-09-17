@@ -1,0 +1,48 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: MyLinkBuddy
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mylinkbuddy
+    username: mylinkbuddy
+    password: mylinkbuddy
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # Bookmark / BookmarkRequest tables are managed by Hibernate.
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+
+  ai:
+    openai:
+      # Set OPENAI_API_KEY as an environment variable. Any OpenAI-compatible endpoint
+      # can be used by also overriding spring.ai.openai.base-url.
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          temperature: 0.2
+      embedding:
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    vectorstore:
+      pgvector:
+        # Creates/verifies the vector_store table (with the pgvector extension) on startup.
+        initialize-schema: true
+        table-name: vector_store
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        # Must match the embedding model's output dimension (text-embedding-3-small = 1536).
+        dimensions: 1536
+
+vaadin:
+  launch-browser: false
+
+logging:
+  level:
+    com.linkBuddy: INFO
