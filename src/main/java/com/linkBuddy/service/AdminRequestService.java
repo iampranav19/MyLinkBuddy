@@ -91,6 +91,27 @@ public class AdminRequestService {
                 request.getRequestedBy(), request.getId(), request.getTitle(), RequestStatus.REJECTED));
     }
 
+    /**
+     * Lets the requesting user withdraw their own request before an admin has acted on it. Marks
+     * it CANCELLED rather than deleting the row, so it still shows up (as a distinct status) in
+     * the user's own request history.
+     */
+    @Transactional
+    public void cancel(Long requestId, String username) {
+        BookmarkRequest request = bookmarkRequestRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("Request not found: " + requestId));
+
+        if (!request.getRequestedBy().equals(username)) {
+            throw new IllegalStateException("Cannot cancel another user's request");
+        }
+        if (request.getStatus() != RequestStatus.PENDING) {
+            throw new IllegalStateException("Only pending requests can be cancelled");
+        }
+
+        request.setStatus(RequestStatus.CANCELLED);
+        bookmarkRequestRepository.save(request);
+    }
+
     public List<Bookmark> listBookmarks() {
         return bookmarkRepository.findAll();
     }
