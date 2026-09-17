@@ -22,6 +22,7 @@ public class MainLayout extends AppLayout {
                 new RouterLink("My Requests", MyRequestsView.class));
         if (isAdmin()) {
             nav.add(new RouterLink("Admin Requests", AdminRequestsView.class));
+            nav.add(new RouterLink("Manage Bookmarks", AdminBookmarksView.class));
         }
         nav.setAlignItems(FlexComponent.Alignment.CENTER);
         nav.setSpacing(true);
