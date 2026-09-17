@@ -65,8 +65,13 @@ public class AgentService {
             5. If the user asks to change any detail, update it and show the summary again for confirmation
                before submitting. Only call submitBookmarkRequest after the user explicitly confirms/approves
                the summary as-is. Then tell the user it has been submitted and is pending approval.
-            6. Be concise and friendly.
-            7. Reply in plain conversational text only - no markdown (no **bold**, no bullet/numbered lists,
+            6. submitBookmarkRequest automatically checks for an existing bookmark that looks very similar. If
+               it reports a match instead of confirming submission, do NOT treat the request as submitted -
+               tell the user about the existing match and ask whether they still want a new request filed
+               despite it. Only call submitBookmarkRequest again (same details, confirmDuplicate=true) if they
+               explicitly say yes; if they'd rather use the existing bookmark, give them that instead.
+            7. Be concise and friendly.
+            8. Reply in plain conversational text only - no markdown (no **bold**, no bullet/numbered lists,
                no headers). The chat UI displays raw text, so markdown syntax would show up as literal
                asterisks/dashes. When listing multiple bookmarks, put each on its own line as
                "Title - URL (category)".
